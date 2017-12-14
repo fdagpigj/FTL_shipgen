@@ -1,0 +1,7 @@
+data/
+img/
+data_originals/
+img_originals/
+__pycache__/
+
+todo.txt
