@@ -1,6 +1,6 @@
 #Requirements:
 
--Python 3: install from www.python.org
+-Python 3.5 or newer: install from python.org
 -Pillow: install with "pip install Pillow" in a command prompt
 -FTL's original data files copied into a folder called "data_originals" and img files into a folder called "img_originals"
 

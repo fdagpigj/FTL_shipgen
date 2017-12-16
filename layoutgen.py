@@ -123,8 +123,6 @@ class Door(object):
 		self.roomB = roomB
 		self.position = position #absolute (x, y)
 		self.vertical = vertical
-		#room_id is set later
-		self.room_id = None
 
 		roomA.doors[doorPosToWall(self, roomA)] = self
 		if roomB is not None:
@@ -167,6 +165,8 @@ class Room(object):
 		self.neighbours = {}
 		#a dict with room ids as keys and distance (in tiles) to that room
 		self.shortestPaths = {}
+		#room_id is set later
+		self.room_id = None
 
 		#a dict with wall pieces as keys and any door present there as value (else None)
 		# - the keys are also handy for looping over all present wall pieces

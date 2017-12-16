@@ -1,8 +1,5 @@
-
 import random
 import os
-#import sys
-
 
 import recolour
 import layoutgen
@@ -11,9 +8,9 @@ import datafilegen
 import blueprintgen
 
 
-layouts = ("anaerobic_cruiser", "circle_cruiser", "crystal_cruiser", "energy_cruiser",
+LAYOUTS = ("anaerobic_cruiser", "circle_cruiser", "crystal_cruiser", "energy_cruiser",
 	"fed_cruiser", "jelly_cruiser", "kestral", "mantis_cruiser", "rock_cruiser", "stealth")
-pieces = ("base", "gib1", "gib2", "gib3", "gib4", "gib5", "gib6")
+PIECES = ("base", "gib1", "gib2", "gib3", "gib4", "gib5", "gib6")
 
 
 def main():
@@ -34,13 +31,13 @@ def main():
 		if os.path.isfile(file_path):
 			os.unlink(file_path)
 
-	for layout in layouts:
+	for layout in LAYOUTS:
 		variants = 2 if layout in ("anaerobic_cruiser", "crystal_cruiser") else 3
 		for variant in range(variants):
 			layout_string = layout if variant == 0 else layout + "_" + str(variant+1)
 			print("[INFO] Generating ship %s"%layout_string)
 			tint = tuple(random.randint(0,255) for x in range(3))
-			for piece in pieces:
+			for piece in PIECES:
 				piece_string = "%s_%s"%(layout_string, piece)
 				recolour.auto_colorize("img_originals/ship/%s.png"%piece_string, "img/ship/%s.png"%piece_string, tint)
 			recolour.auto_colorize("img_originals/customizeUI/miniship_%s.png"%layout_string, "img/customizeUI/miniship_%s.png"%layout_string, tint)
@@ -54,7 +51,7 @@ def main():
 			for door in all_doors:
 				door.position = door.position[0] - offset[0], door.position[1] - offset[1]
 			datafilegen.generateDatafiles(all_rooms, all_doors, offset, layout, "data", layout_string)
-			blueprintgen.generateBlueprint(all_rooms, layout, variant, layout_string, "data", None)
+			blueprintgen.generateBlueprint(all_rooms, layout, variant, layout_string, "data", all_doors)
 
 
 
