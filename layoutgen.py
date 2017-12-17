@@ -49,8 +49,7 @@ def generateLayout(layout):
 
 	#should I put this before airlocks?
 	#for the time being let's not worry about artillery 
-	systems_to_place = 	["mind", "teleporter", "battery", "cloaking", "doors", "drones", "oxygen", "pilot", "hacking", "engines", "weapons", "sensors", "shields"]
-	systems_to_place.append(["clonebay","medbay"][random.randint(0, 1)])
+	systems_to_place = 	["mind", "teleporter", "battery", "cloaking", "doors", "drones", "oxygen", "pilot", "hacking", "engines", "weapons", "sensors", "shields", "medbay"]
 	placeSystems(systems_to_place)
 
 	return all_rooms, all_doors

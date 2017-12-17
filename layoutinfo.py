@@ -101,17 +101,17 @@ info = {
 }
 
 txt = {
-	#min_x_offset, min_y_offset, ellipse, default X_OFFSET, Y_OFFSET
-	"anaerobic_cruiser": (3,0, "ELLIPSE\n341\n281\n-30\n0", 3,1),
-	"circle_cruiser": (2,2, "ELLIPSE\n245\n220\n-10\n0", 3,2),
-	"crystal_cruiser": (0,2, "ELLIPSE\n385\n242\n22\n-40", 0,2),
-	"energy_cruiser": (1,1, "ELLIPSE\n320\n200\n-20\n20", 1,1),
-	"fed_cruiser": (1,1, "ELLIPSE\n402\n253\n-63\n-3", 1,1),
-	"jelly_cruiser": (3,0, "ELLIPSE\n327\n218\n-56\n0", 5,1),
-	"kestral": (0,2, "ELLIPSE\n350\n220\n-30\n0", 0,2),
-	"mantis_cruiser": (3,0, "ELLIPSE\n350\n220\n-83\n-3", 3,0),
-	"rock_cruiser": (4,2, "ELLIPSE\n327\n218\n-42\n0", 4,2),
-	"stealth": (2,2, "ELLIPSE\n350\n245\n-70\n0", 2,2)
+	#min X_OFFSET, min Y_OFFSET, ellipse size string, vanilla ellipse offset (x,y), vanilla layout (w,h), vanilla (X_OFFSET, Y_OFFSET)
+	"anaerobic_cruiser": (3,0, "ELLIPSE\n341\n281", (-30,0), (9,10), (3,1)),
+	"circle_cruiser": (2,2, "ELLIPSE\n245\n220", (-10,0), (9,7), (3,2)),
+	"crystal_cruiser": (0,2, "ELLIPSE\n385\n242", (22,-40), (15,8), (0,2)),
+	"energy_cruiser": (1,1, "ELLIPSE\n320\n200", (-20,20), (13,7), (1,1)),
+	"fed_cruiser": (1,1, "ELLIPSE\n402\n253", (-63,-3), (15,8), (1,1)),
+	"jelly_cruiser": (3,0, "ELLIPSE\n327\n218", (-56,0), (8,8), (5,1)),
+	"kestral": (0,2, "ELLIPSE\n350\n220", (-30,0), (15,6), (0,2)),
+	"mantis_cruiser": (3,0, "ELLIPSE\n350\n220", (-83,3), (12,10), (3,0)),
+	"rock_cruiser": (4,2, "ELLIPSE\n327\n218", (-42,0), (9,6), (4,2)),
+	"stealth": (2,2, "ELLIPSE\n350\n245", (-70,0), (13,6), (2,2))
 }
 
 floor_offset = {

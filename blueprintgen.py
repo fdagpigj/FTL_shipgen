@@ -19,6 +19,7 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 	return_string += '\t<name>%s</name>\n'%"RANDOM SHIP"
 	#return_string += '\t<unlock>%s</unlock>\n'%"fuck if I know :DDDD"
 	return_string += '\t<desc>%s</desc>\n'%"Dude it's a procedurally generated ship what do you expect me to say?"
+
 	return_string += '\t<systemList>\n'
 	for i, room in enumerate(all_rooms):
 		if room.system is not None:
@@ -46,6 +47,21 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 				return_string += '\t\t\t</slot>\n\t\t</%s>\n'%room.system
 			else:
 				return_string += '\t\t<%s power="%i" room="%i" start="%s" %s/>\n'%(room.system, power, i, starts, img_str)
+
+			if room.system == "medbay":
+				#the room's system is always medbay even if it starts with a clonebay or neither because this way it generates a valid floor image for medbay
+				station = [random.randrange(room.dimensions[0] * room.dimensions[1]) , "no"]
+				if "clonebay" in systems:
+					starts = "true"
+					power = systems.get("clonebay")
+				else:
+					starts = "false"
+					power = 1
+				return_string += '\t\t<clonebay power="1" room="%i" start="%s">\n'%(i, starts)
+				return_string += '\t\t\t<slot>\n'
+				return_string += '\t\t\t\t<number>%i</number>\n'%station[0]
+				return_string += '\t\t\t</slot>\n\t\t</%s>\n'%room.system
+
 	return_string += '\t</systemList>\n'
 	return_string += '\t<weaponSlots>%i</weaponSlots>\n'%misc["weaponSlots"]
 	return_string += '\t<droneSlots>%i</droneSlots>\n'%misc["droneSlots"]
@@ -57,6 +73,7 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 	for drone in drones:
 		return_string += '\t\t<drone name="%s" />'%drone
 	return_string += '\t</droneList>'
+
 	return_string += '\t<health amount="30"/>\n'
 	return_string += '\t<maxPower amount="%i"/>\n'%misc["reactor_power"]
 	for race, amount in crew.items():
@@ -67,6 +84,7 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 	return_string += '\t<cloakImage>%s</cloakImage>\n'%layout
 	return_string += '\t<floorImage>%s</floorImage>\n'%layout_string
 	return_string += '</shipBlueprint>\n\n\n'
+
 
 	filename = "blueprints.xml.append"
 	if layout == "anaerobic_cruiser":
