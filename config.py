@@ -3,17 +3,17 @@ LAYOUTS = ("anaerobic_cruiser", "circle_cruiser", "crystal_cruiser", "energy_cru
 
 
 crew_weights = {
-	"default": {"human":1,"engi":1,"mantis":1,"rock":1,"energy":1,"slug":1,"anaerobic":1,"crystal":1},
-	"anaerobic_cruiser": {"anaerobic":4},
-	"circle_cruiser": {"engi":4},
-	"crystal_cruiser": {"crystal":4},
-	"energy_cruiser": {"energy":4},
+	"default": {"human":2,"engi":2,"mantis":2,"rock":2,"energy":2,"slug":2,"anaerobic":1,"crystal":1},
+	"anaerobic_cruiser": {"anaerobic":8},
+	"circle_cruiser": {"engi":8},
+	"crystal_cruiser": {"crystal":8,"anaerobic":2},
+	"energy_cruiser": {"energy":8},
 	"fed_cruiser": {},
-	"jelly_cruiser": {"slug":4},
-	"kestral": {"human":2},
-	"mantis_cruiser": {"mantis":4,"engi":2},
-	"rock_cruiser": {"rock":4},
-	"stealth": {"engi":2}
+	"jelly_cruiser": {"slug":8},
+	"kestral": {"human":4},
+	"mantis_cruiser": {"mantis":8,"engi":4},
+	"rock_cruiser": {"rock":8},
+	"stealth": {"engi":3}
 }
 
 race_bonus = {
@@ -33,11 +33,11 @@ system_points = {
 	"cloaking": {"defence":15, "scrap":[150,30,50]},
 	"pilot": {"scrap":[0,20,50]},
 	"medbay": {"support":10, "scrap":[50,35,45]},
-	"shields": {"defence":20, "scrap":[125,100,20,30,40,60,80,100]},
+	"shields": {"defence":25, "scrap":[125,100,20,30,40,60,80,100]},
 	"artillery": {"scrap":[0,30,50,80]},
 	"engines": {"scrap":[0,10,15,30,40,60,80,120]},
 	"weapons": {"scrap":[50,40,25,35,50,75,90,100]},
-	"drones": {"scrap":[60,10,20,30,45,60,80,100]},
+	"drones": {"defence":1, "scrap":[60,10,20,30,45,60,80,100]},
 	"sensors": {"support":5, "scrap":[40,25,40]},
 	"doors": {"support":10, "scrap":[60,35,50]},
 	"clonebay": {"support":10, "scrap":[50,35,45]},

@@ -18,7 +18,7 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 	return_string += '\t<class>%s</class>\n'%blueprint_info[1]
 	return_string += '\t<name>%s</name>\n'%"RANDOM SHIP"
 	#return_string += '\t<unlock>%s</unlock>\n'%"fuck if I know :DDDD"
-	return_string += '\t<desc>%s</desc>\n'%"Dude it's a procedurally generated ship what do you expect me to say?"
+	return_string += '\t<desc>%s</desc>\n'%misc["description"]
 
 	return_string += '\t<systemList>\n'
 	for i, room in enumerate(all_rooms):

@@ -5,12 +5,15 @@ import config
 
 
 def generateLoadout(all_rooms, all_doors, layout):
-	crew = pickCrew(layout)
+	description = []
+	crew, crew_count = pickCrew(layout)
+	if crew_count > 4:
+		description.append("Zomg overstaffed!")
 
 
 	#these might be helpful in determining what drones and augments to give
 	path_points, venting_points = getLayoutPoints(all_rooms, all_doors, crew)
-	boarder_defence_points, repair_points, firefight_points, airless_points, crew_scrap = getCrewPoints(crew)
+	boarder_defence_points, repair_points, firefight_points, airless_points, anaerobic, crew_scrap = getCrewPoints(crew)
 
 	boarding_points, crew_synergies = getBoardingPoints(all_rooms, crew)
 
@@ -20,10 +23,10 @@ def generateLoadout(all_rooms, all_doors, layout):
 	viable_systems = collections.defaultdict(int)
 	viable_subsystems = collections.defaultdict(int)
 
-	viable_augments["O2_MASKS"] += 1/((airless_points**2)*venting_points*boarder_defence_points*firefight_points)
+	viable_augments["O2_MASKS"] += 1/(2*(airless_points**2) *boarder_defence_points*firefight_points)
 	viable_augments["NANO_MEDBAY"] += 1/(airless_points*boarder_defence_points)
 
-	viable_augments["FIRE_EXTINGUISHERS"] += 1/(firefight_points**2)
+	viable_augments["FIRE_EXTINGUISHERS"] += 1/((firefight_points**2)*(venting_points**2))
 
 	viable_drones["REPAIR"] += 1/(repair_points) + 1/(airless_points*repair_points*firefight_points)
 	viable_support_weapons["BOMB_HEAL_SYSTEM"] += 1/(repair_points**2)
@@ -43,13 +46,13 @@ def generateLoadout(all_rooms, all_doors, layout):
 
 
 	#pilot, engines, weapons are guaranteed
-	viable_systems["oxygen"] += 20 + 200/(airless_points**2) - 10 * (layout == "anaerobic_cruiser")
+	viable_systems["oxygen"] += 1 + 150/(airless_points**2) + 30 * (1 - anaerobic) - 10 * (layout == "anaerobic_cruiser")
 	viable_systems["teleporter"] += boarding_points + 10 * (layout == "mantis_cruiser")
 	viable_systems["cloaking"] += 1 + 50 * (layout == "stealth")
 	viable_systems["shields"] += 100 - 99 * (layout == "stealth") - 20 * (layout == "energy_cruiser")
 	viable_systems["hacking"] += 10 + 5 * (layout == "jelly_cruiser")
 	viable_systems["mind"] += 10 + 5 * (layout == "jelly_cruiser")
-	viable_systems["drones"] += 10 + 10 * (layout == "circle_cruiser") + 4 * len(viable_drones)
+	viable_systems["drones"] += 3 + 10 * (layout == "circle_cruiser") + 4 * len(viable_drones)
 
 	viable_subsystems["sensors"] += 15 - 10 * (layout == "jelly_cruiser")
 	viable_subsystems["doors"] += 20 - 5 * (layout == "rock_cruiser" or layout == "anaerobic_cruiser")
@@ -61,6 +64,8 @@ def generateLoadout(all_rooms, all_doors, layout):
 	hs = random.random()
 	if hs < 0.48:
 		heal_system = "medbay"
+		if "oxygen" not in systems:
+			viable_augments["NANO_MEDBAY"] += 1
 	elif hs < 0.95:
 		heal_system = "clonebay"
 		boarding_points += crew_synergies["clonebay"]
@@ -68,10 +73,14 @@ def generateLoadout(all_rooms, all_doors, layout):
 		systems.append(heal_system)
 	else:
 		print("lol no healing system for you")
+		description.append("No healing system for you.")
 		#TODO: actually pick some weapons from this dict if appropriate
 		viable_support_weapons["BOMB_HEAL"] += 1
 		if "teleporter" in systems:
 			viable_augments["TELEPORT_HEAL"] += 2
+		if "oxygen" not in systems:
+			description.append("Enjoy losing crew!")
+			viable_augments["O2_MASKS"] += 2
 	if heal_system != "medbay":
 		viable_augments["NANO_MEDBAY"] = 0
 
@@ -89,6 +98,10 @@ def generateLoadout(all_rooms, all_doors, layout):
 			drone_power = total_power
 	else:
 		drones = []
+
+	if "REPAIR" in drones:
+		viable_augments["FIRE_EXTINGUISHERS"] /= 2
+		viable_support_weapons["BOMB_HEAL_SYSTEM"] /= 8
 
 	#remember that the system levels are yet to be set
 	sys_defence_points, sys_offence_points, sys_support_points, sys_scrap, sys_crewkill_points, sys_shield_drop = getSystemPoints(systems)
@@ -109,6 +122,7 @@ def generateLoadout(all_rooms, all_doors, layout):
 	droneSlots = 2
 	drone3chance = 0.1 + 0.2 * ("drones" in systems) + 1.0 * (len(drones) == 3)
 	if random.random() < drone3chance:
+		description.append("This one has three drone slots.")
 		droneSlots = 3
 	weaponSlots = 3
 	weapon4chance = 0.6 - 0.2 * (layout in ("circle_cruiser", "stealth", "mantis_cruiser"))
@@ -129,14 +143,28 @@ def generateLoadout(all_rooms, all_doors, layout):
 		else:
 			print("did not find a suitable third weapon", weapons, viable_weapons, req_shield_drop)
 
+	#print("[DEBUG] Pre-drop weapons", weapons, weapon_power)
+	weapons, power_drop = dropRedundantWeapon(weapons, systems)
+	weapon_power -= power_drop
+	support_weapon_weight = sum([a[1] for a in viable_support_weapons.items()])
+	if len(weapons) < weaponSlots and support_weapon_weight > random.random() + 1:
+		support_weapon = weighted_chance(viable_support_weapons)
+		viable_support_weapons[support_weapon] = 0
+		weapons.append(support_weapon)
+		if support_weapon_weight > 1 and weapon_power < 4:
+			weapon_power += 1
+	#print("[DEBUG] Final? weapons", weapons, weapon_power)
 	weapon_offence_points, weapon_crewkill_points, weapon_slowness, req_shield_drop = getWeaponPoints(weapons, systems, offence_points, shield_drop, crew_synergies)
 
 
 	if weapon_power > 3:
-		max_power = 0
+		#the old system caused a 2+2+1 setup to get 2 power even though I'd prefer 3 - as this new should give
+		power_list = []
 		for weapon in weapons:
-			max_power = max(config.weapon_points[weapon]["power"], max_power)
-		weapon_power = max_power
+			power_list.append(config.weapon_points[weapon]["power"])
+		weapon_power = max(power_list)
+		if sum(power_list) > weapon_power + 2:
+			weapon_power += 1
 
 	missiles = 0
 	for weapon in weapons:
@@ -149,7 +177,7 @@ def generateLoadout(all_rooms, all_doors, layout):
 	system_levels = collections.defaultdict(int)
 	for system in systems:
 		if system == "weapons":
-			system_levels["weapons"] = weapon_power
+			system_levels["weapons"] = max(weapon_power, 1)
 		elif system == "drones":
 			system_levels["drones"] = drone_power
 		elif system == "shields":
@@ -162,12 +190,14 @@ def generateLoadout(all_rooms, all_doors, layout):
 
 	if (crewkill_points + weapon_crewkill_points + boarding_points) > offence_points + weapon_offence_points:
 		slowness += 200 / (crewkill_points + weapon_crewkill_points + boarding_points)
+		description.append("Crewkiller?")
 	else:
 		slowness += weapon_slowness
+		description.append("Gunship?")
 
 	def_ratio = defence_points / slowness
 	if def_ratio < 0.5:
-		print("[DEBUG] Raising defences because def_ratio is %f"%def_ratio)
+		print("[DEBUG] Raising defences because def_ratio is %f because"%def_ratio, defence_points, slowness)
 		dm = random.random()
 		if dm < 0.4:
 			system_levels["shields"] += 2
@@ -205,10 +235,85 @@ def generateLoadout(all_rooms, all_doors, layout):
 		if "shields" in system_levels:
 			system_levels["shields"] = 1
 
+	if system_levels["mind"] > 0 and "slug" not in crew and system_levels["sensors"] < 2:
+		visibility_req = 2.0
+		for weapon in weapons:
+			if "BOMB" in weapon:
+				visibility_req /= 2.0
+		if system_levels["teleporter"] > 0:
+			visibility_req /= 3.0
+		if random.random() < 0.3 * visibility_req:
+			system_levels["sensors"] = 2
+		else:
+			viable_augments["LIFE_SCANNER"] += visibility_req
+
 	#print("[DEBUG] Picking augments, system_levels, viable_augments:", augments, system_levels, viable_augments)
 	augments, viable_augments = pickAugments(augments, viable_augments)
 	#print("[DEBUG] Picked augments:", augments)
 
+	if system_levels["oxygen"] < 1 and "O2_MASKS" not in augments and system_levels["medbay"] > 0 and airless_points < 1:
+		system_levels["medbay"] += 1
+
+	reactor_power, description = getReactor(system_levels, crew, description)
+
+	if "hacking" in system_levels:
+		drone_parts += random.randint(12,16)
+
+	#yeah we're not done yet, balancing is out the whazoo but too eager to test
+	misc = {
+		"missiles":missiles, "drone_parts":drone_parts, "reactor_power":reactor_power,
+		"droneSlots":droneSlots, "weaponSlots":weaponSlots, "description":" ".join(description)
+	}
+
+	if system_levels["oxygen"] < 1:
+		description.append("Breathing is a privilege.")
+
+	#misc contains weapon/drone slot count, starting drone parts/missiles, reactor power, etc
+	return system_levels, crew, weapons, drones, augments, misc
+
+
+def dropRedundantWeapon(weapons, systems):
+	#ok fuck this can drop a dual laser instead of two beams...
+	drop_need = 2 - 0.95*("teleporter" in systems) - 2*("hacking" in systems)
+	power_drop = 0
+	redundancies = []
+
+	can_penetrate = False
+	sd_sum, sp_sum, dmg_sum,  lethal_sum, crewkill_sum, missile_sum = getWeaponSums(-1, weapons)
+	if sd_sum + sp_sum > drop_need and ((dmg_sum > 0 and crewkill_sum > 0) or (lethal_sum > 0 and dmg_sum > 1)):
+		can_penetrate = True
+	
+	for index, drop in enumerate(weapons):
+		sd_sum, sp_sum, dmg_sum,  lethal_sum, crewkill_sum, missile_sum = getWeaponSums(index, weapons)
+		if (
+			(not can_penetrate and dmg_sum + crewkill_sum + lethal_sum > 1)
+			or (sd_sum + sp_sum > drop_need and ((dmg_sum > 0 and crewkill_sum > 0)
+			or (lethal_sum > 0 and dmg_sum > 1)))
+			):
+			redundancies.append(index)
+	if len(redundancies) > 0:
+		dropper = random_from(redundancies)
+		drop = weapons.pop(dropper)
+		power_drop = config.weapon_points[drop].get("power",0)
+		print("[DEBUG] Dropping", drop, power_drop)
+	return weapons, power_drop
+
+
+def getWeaponSums(ban_index, weapons):
+	sd_sum, sp_sum, dmg_sum,  lethal_sum, crewkill_sum, missile_sum = 0,0,0, 0,0,0
+	for i, weapon in enumerate(weapons):
+		if i == ban_index:
+			continue
+		reusability = 1- 0.9* config.weapon_points[weapon].get("missiles",0)
+		sd_sum += config.weapon_points[weapon].get("shield_drop",0) * reusability
+		sp_sum += config.weapon_points[weapon].get("sp",0) * reusability
+		dmg_sum += config.weapon_points[weapon].get("offence",0) + config.weapon_points[weapon].get("nonlethal",0)
+		lethal_sum += config.weapon_points[weapon].get("offence",0) * reusability
+		crewkill_sum += (config.weapon_points[weapon].get("crewkill",0) + config.weapon_points[weapon].get("fire",0)) * reusability
+	return sd_sum, sp_sum, dmg_sum, lethal_sum, crewkill_sum, missile_sum
+
+
+def getReactor(system_levels, crew, description):
 	total_power = 0
 	for system, power in system_levels.items():
 		if system not in ("pilot", "doors", "sensors", "battery"):
@@ -216,6 +321,7 @@ def generateLoadout(all_rooms, all_doors, layout):
 		if system == "battery":
 			total_power -= power * 2
 	total_power -= crew.get("energy",0)
+
 	reducted_power = 0
 	if total_power > 9:
 		reducted_power = total_power - 9
@@ -226,24 +332,16 @@ def generateLoadout(all_rooms, all_doors, layout):
 			total_power -= 1
 	if total_power < 2:
 		total_power = 2
-	reactor_power = total_power
+
+	if reducted_power > random.randint(1,3) and system_levels["battery"] < 2:
+		system_levels["battery"] += 1
+		reducted_power -= 2
 	if reducted_power > 1:
-		if "battery" not in system_levels:
-			system_levels["battery"] += 1
-		else:
-			system_levels["battery"] += 1
+		description.append("Power shortage?")
+	if total_power < 4:
+		description.append("Tiny reactor.")
 
-	if "hacking" in system_levels:
-		drone_parts += random.randint(12,16)
-
-	#yeah we're not done yet, balancing is out the whazoo but too eager to test
-	misc = {
-		"missiles":missiles, "drone_parts":drone_parts, "reactor_power":reactor_power,
-		"droneSlots":droneSlots, "weaponSlots":weaponSlots
-	}
-
-	#misc contains weapon/drone slot count, starting drone parts/missiles, reactor power, etc
-	return system_levels, crew, weapons, drones, augments, misc
+	return total_power, description
 
 
 def pickAugments(augments, viable_augments):
@@ -484,7 +582,7 @@ def pickSystems(viable_systems, viable_subsystems):
 		systems.append(system)
 		del viable_systems[system]
 		total_weight = sum([a[1] for a in viable_systems.items()])
-		if total_weight < random.randrange(100) or len(systems) > random.randint(5,7) or len(viable_systems) == 0:
+		if total_weight < random.randrange(100) or len(systems) > random.randint(4,5) or len(viable_systems) == 0:
 			break
 	for _ in tuple(viable_subsystems):
 		total_weight = sum([a[1] for a in viable_subsystems.items()])
@@ -499,6 +597,7 @@ def pickSystems(viable_systems, viable_subsystems):
 
 def getCrewPoints(crew):
 	boarder_defence_points, repair_points, firefight_points,  airless_points, crew_scrap, total_crew = 0,0,0, 0,0,0
+	anaerobic = 1.0
 	for race, count in crew.items():
 		bonus = config.race_bonus[race]
 		tp_synergies = bonus.get("tp_synergies",{})
@@ -506,10 +605,11 @@ def getCrewPoints(crew):
 		repair_points += count * (bonus.get("repair",1))
 		firefight_points += count * (bonus.get("health",100)/100 * bonus.get("repair",1) * (1 + tp_synergies.get("fire",0) + tp_synergies.get("breach",0)) * bonus.get("speed",1))
 		airless_points += count * (bonus.get("health",100)/100 * (bonus.get("repair",1)**0.5) * (1 + 10 * tp_synergies.get("breach",0)**2) * bonus.get("speed",1))
+		anaerobic = min(anaerobic, tp_synergies.get("breach",0))
 		crew_scrap += count * bonus["scrap"]
 		total_crew += count
 	airless_points /= total_crew
-	return boarder_defence_points, repair_points, firefight_points, airless_points, crew_scrap
+	return boarder_defence_points, repair_points, firefight_points, airless_points, anaerobic, crew_scrap
 
 
 def getLayoutPoints(all_rooms, all_doors, crew):
@@ -543,20 +643,25 @@ def getBoardingPoints(all_rooms, crew):
 
 def pickCrew(layout):
 	crew_count = 0
-	for i in range(4):
-		count = random.randint(1,4)
-		if count + crew_count <= 4 and crew_count <= random.randrange(2):
-			crew_count += count
-		else:
-			#roughly 6.1% chance of 1 crew, 31.2% 2 crew, 31.4% 3 crew, 31.3% 4 crew
-			#(percentages from test with 1 million attempts)
-			break
+	number = random.random()
+	#for now, let's not bother making auto ships because those have a few special practical requirements
+	if number < 0.06: #6%
+		crew_count = 1
+	elif number < 0.35: #29%
+		crew_count = 2
+	elif number < 0.8: #45%
+		crew_count = 3
+	elif number < 0.99: #19%
+		crew_count = 4
+	else: #1% chance
+		crew_count = random.randint(5,8)
+
 	crew = collections.defaultdict(int)
 	crew_weights = collections.ChainMap(config.crew_weights[layout], config.crew_weights["default"])
 	for i in range(crew_count):
 		race = weighted_chance(crew_weights)
 		crew[race] += 1
-	return crew
+	return crew, crew_count
 
 
 def weighted_chance(thing):
