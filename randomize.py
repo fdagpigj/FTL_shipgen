@@ -1,6 +1,8 @@
 import random
 import os
 
+from pathlib import Path
+
 import recolour
 import layoutgen
 import floorgen
@@ -14,6 +16,17 @@ PIECES = ("base", "gib1", "gib2", "gib3", "gib4", "gib5", "gib6")
 
 
 def main():
+	if not os.path.exists("data"):
+		path = Path("data")
+		path.parent.mkdir(parents=True, exist_ok=True)
+	if not os.path.exists("img/customizeUI"):
+		path = Path("data")
+		path.parent.mkdir(parents=True, exist_ok=True)
+	if not os.path.exists("img_originals/ship/interior"):
+		print("[WARNING] Please copy extracted vanilla FTL img folder into a img_originals folder")
+	if not os.path.exists("data_originals"):
+		print("[WARNING] Please copy extracted vanilla FTL data folder into a data_originals folder")
+
 	with open("data/blueprints.xml.append", "w+") as f:
 		f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
 	with open("data/dlcBlueprints.xml.append", "w+") as f:
@@ -22,6 +35,7 @@ def main():
 		f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
 	with open("data/rooms.xml.append", "w+") as f:
 		f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
+
 	interior_dir = "img/ship/interior"
 	if not os.path.exists(interior_dir):
 		path = Path(interior_dir)
@@ -30,6 +44,7 @@ def main():
 		file_path = os.path.join(interior_dir, file)
 		if os.path.isfile(file_path):
 			os.unlink(file_path)
+
 
 	for layout in LAYOUTS:
 		variants = 2 if layout in ("anaerobic_cruiser", "crystal_cruiser") else 3

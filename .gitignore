@@ -5,3 +5,4 @@ img_originals/
 __pycache__/
 
 todo.txt
+*.ftl
