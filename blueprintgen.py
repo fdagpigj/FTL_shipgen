@@ -40,7 +40,7 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 			if station is not None:
 				return_string += '\t\t<%s power="%i" room="%i" start="%s" %s>\n'%(room.system, power, i, starts, img_str)
 				return_string += '\t\t\t<slot>\n'
-				if station[1] is not "no":
+				if station[1] != "no":
 					return_string += '\t\t\t\t<direction>%s</direction>\n'%station[1]
 				#print("creating station", station)
 				return_string += '\t\t\t\t<number>%i</number>\n'%station[0]

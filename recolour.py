@@ -4,9 +4,8 @@ from PIL.ImageColor import getcolor, getrgb
 from PIL.ImageOps import grayscale
 
 
-def image_tint(src, tint):
-    if Image.isStringType(src):  # file path?
-        src = Image.open(src)
+def image_tint(src_path, tint):
+    src = Image.open(src_path)
     if src.mode not in ['RGB', 'RGBA']:
         raise TypeError('Unsupported source image mode: {}'.format(src.mode))
     src.load()
