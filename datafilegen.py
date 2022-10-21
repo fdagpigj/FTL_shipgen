@@ -33,7 +33,7 @@ def generateDatafiles(all_rooms, all_doors, offset, layout, out_dir, layout_stri
 		f.write(txt_string)
 
 	floor_offset = layoutinfo.floor_offset[layout]
-	with open("data_originals/%s.xml"%layout, "r") as f_in:
+	with open(f"data_originals/{layout.value}.xml", "r") as f_in:
 		xml_string = ""
 		for line in f_in:
 			is_relevant = 0

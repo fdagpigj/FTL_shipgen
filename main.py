@@ -8,10 +8,9 @@ import layoutgen
 import floorgen
 import datafilegen
 import blueprintgen
+from config import LAYOUTS
 
 
-LAYOUTS = ("anaerobic_cruiser", "circle_cruiser", "crystal_cruiser", "energy_cruiser",
-	"fed_cruiser", "jelly_cruiser", "kestral", "mantis_cruiser", "rock_cruiser", "stealth")
 PIECES = ("base", "gib1", "gib2", "gib3", "gib4", "gib5", "gib6")
 
 
@@ -47,9 +46,9 @@ def main():
 
 
 	for layout in LAYOUTS:
-		variants = 2 if layout in ("anaerobic_cruiser", "crystal_cruiser") else 3
+		variants = 2 if layout in (LAYOUTS.anaerobic_cruiser, LAYOUTS.crystal_cruiser) else 3
 		for variant in range(variants):
-			layout_string = layout if variant == 0 else layout + "_" + str(variant+1)
+			layout_string = layout.value if variant == 0 else f"{layout.value}_{variant+1}"
 			print("[INFO] Generating ship %s"%layout_string)
 			tint = tuple(random.randint(0,255) for x in range(3))
 			for piece in PIECES:

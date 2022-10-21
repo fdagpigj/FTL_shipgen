@@ -3,6 +3,7 @@ import math
 
 
 import layoutinfo
+from config import SYSTEMS
 
 #idk these are arbitrary but they need to be large enough to fit all ships
 GRID_WIDTH = 30
@@ -11,11 +12,31 @@ GRID_HEIGHT = 20
 all_rooms = []
 all_doors = []
 
+# How many blocked wall pieces the system art requires
 SYSTEM_GRUMPINESS = {
-	0:["clonebay", "mind", "teleporter"],
-	1:["artillery", "battery", "cloaking", "doors", "drones", "medbay", "oxygen", "pilot", "hacking"],
+	0: [
+		SYSTEMS.clonebay,
+		SYSTEMS.mind,
+		SYSTEMS.teleporter,
+		],
+	1: [
+		SYSTEMS.artillery,
+		SYSTEMS.battery,
+		SYSTEMS.cloaking,
+		SYSTEMS.doors,
+		SYSTEMS.drones,
+		SYSTEMS.medbay,
+		SYSTEMS.oxygen,
+		SYSTEMS.pilot,
+		SYSTEMS.hacking,
+		],
 	#should I just make sensors into a 1?
-	2:["engines", "weapons", "sensors", "shields"]
+	2: [
+		SYSTEMS.engines,
+		SYSTEMS.weapons,
+		SYSTEMS.sensors,
+		SYSTEMS.shields,
+		]
 }
 
 
@@ -49,7 +70,7 @@ def generateLayout(layout):
 
 	#should I put this before airlocks?
 	#for the time being let's not worry about artillery 
-	systems_to_place = 	["mind", "teleporter", "battery", "cloaking", "doors", "drones", "oxygen", "pilot", "hacking", "engines", "weapons", "sensors", "shields", "medbay"]
+	systems_to_place = tuple(filter(lambda s: s not in (SYSTEMS.clonebay, SYSTEMS.artillery), SYSTEMS))
 	placeSystems(systems_to_place)
 
 	return all_rooms, all_doors
@@ -178,7 +199,6 @@ class Room(object):
 		for wall in walls:
 			self.doors[wall] = None
 
-		#a string representing the system in this room
 		self.system = None
 
 

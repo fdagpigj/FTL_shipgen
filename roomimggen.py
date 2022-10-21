@@ -4,6 +4,7 @@ from pathlib import Path
 import random
 
 import imgdefs
+from config import SYSTEMS
 
 
 GRID_SIZE = 35
@@ -86,9 +87,9 @@ def extend(walls, size):
 
 def findRoomImage(room):
 	#print("[DEBUG] Fetching image for %s"%room.system)
-	if room.system == "teleporter":
+	if room.system == SYSTEMS.teleporter:
 		return None, None
-	elif room.system == "clonebay":
+	elif room.system == SYSTEMS.clonebay:
 		station = [random.randrange(room.dimensions[0] * room.dimensions[1]) , "no"]
 		return None, station
 
@@ -117,7 +118,7 @@ def findRoomImage(room):
 				if len(image) > 6:
 					#convert glow positions to relative so rotating/mirroring doesn't affect them
 					glow = GLOW_SIZE
-					if room.system == "pilot":
+					if room.system == SYSTEMS.pilot:
 						glow = PILOT_GLOW_SIZE
 					x = image[6] % GRID_SIZE
 					y = image[7] % GRID_SIZE
@@ -202,10 +203,10 @@ def findRoomImage(room):
 
 	if image is not None:
 		transformations, station, size = image[1], image[2], image[3]
-		imgname = room.system
+		imgname = room.system.value
 		if len(image[0]) > 0:
-			imgname += "_"+image[0]
-		pathname = "ship/interior/room_%s.png"%imgname
+			imgname = f"{imgname}_{image[0]}"
+		pathname = f"ship/interior/room_{imgname}.png"
 		for in_dir in ("img_extra", "img_originals"):
 			if os.path.exists("%s/%s"%(in_dir, pathname)):
 				pathname = "%s/%s"%(in_dir, pathname)
