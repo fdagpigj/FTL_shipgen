@@ -76,7 +76,7 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 	# for race, amount in crew.items():
 	# 	return_string += '\t<crewCount amount="%i" class="%s" />\n'%(amount, race)
 	for race in loadout['crew']:
-		return_string += f'\t<crewCount amount="1" class="{race}" />\n'
+		return_string += f'\t<crewCount amount="1" class="{race.value}" />\n'
 	for augment in loadout['augments']:
 		return_string += f'\t<aug name="{augment.value}" />\n'
 
@@ -93,4 +93,5 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 		filename = "dlcBlueprintsOverwrite.xml.append"
 	with open(f"{out_dir}/{filename}", "a") as f:
 		f.write(return_string)
+	return loadout['warnings'], loadout['errors']
 
