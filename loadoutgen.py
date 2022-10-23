@@ -1,6 +1,7 @@
 import random
 import collections
 import math
+import time
 
 import config
 from config import SYSTEMS, SUBSYSTEMS, AUGMENTS, RACES, LAYOUTS
@@ -37,6 +38,7 @@ def init():
 		should('fair_system_levels'),
 		should('fair_reactor_power'),
 		should('fair_crew_count', ignore_chance=0.1),
+		should('fair_system_count', ignore_chance=0.2),
 		should('missile_count', ignore_chance=0),
 		should('drone_part_count', ignore_chance=0),
 		should('no_shield_buffer', ignore_chance=0.3),
@@ -90,6 +92,9 @@ def generateLoadout(all_rooms, all_doors, layout):
 		'drone_parts': 0,
 		'teleporter_size': 0, # only present for calculating crewkill capability
 		'layout': layout, # only present for getting ship class preferences
+		# Only for displaying a summary at the end
+		'warnings': [],
+		'errors': [],
 	}
 
 	for room in all_rooms:
@@ -113,8 +118,7 @@ def generateLoadout(all_rooms, all_doors, layout):
 			unsatisfied_constraints = False
 			turns_till_panic -= 1
 			if turns_till_panic == 30:
-				print(f'[WARNING] Entering pre-panic mode!')
-				warnings += 1
+				warn(loadout, f'[WARNING] Entering pre-panic mode!')
 			if turns_till_panic <= 0:
 				print(f'[ERROR] Panicking after {warnings} warnings and {errors} errors')
 				print(loadout)
@@ -123,11 +127,10 @@ def generateLoadout(all_rooms, all_doors, layout):
 				cname = constraint['name']
 				fail_recency[cname] += 1
 				# Check constraints that failed recently on every pass, only check periodically after OK 3 times
-				if (fail_recency[cname] <= 3 or fail_recency[cname] % 8 == 0) and (constraint['panic'] or turns_till_panic > 30):
+				if (fail_recency[cname] <= 3 or fail_recency[cname] % 3 == 0) and (constraint['panic'] or turns_till_panic > 30):
 					satisfied = constraint['check'](loadout)
 					if satisfied is None:
-						print(f'[ERROR] Constraint {cname} returned None')
-						errors += 1
+						error(loadout, f'Constraint {cname} returned None')
 					if not satisfied:
 						if turns_till_panic < 40:
 							print(f'[DEBUG] Attempting to satisfy constraint {cname}')
@@ -137,11 +140,17 @@ def generateLoadout(all_rooms, all_doors, layout):
 						clean_run = False
 
 	print('[DEBUG]', turns_till_panic, loadout)
-	loadout['warnings'] = warnings
-	loadout['errors'] = errors
 
 	return loadout
 
+
+def warn(loadout, message):
+	print(f'[WARNING] {message}')
+	loadout['warnings'].append(message)
+
+def error(loadout, message):
+	print(f'[ERROR] {message}')
+	loadout['errors'].append(message)
 
 
 
@@ -215,9 +224,11 @@ def alleviate_drone_count(loadout):
 
 
 def check_drone_slots(loadout):
-	return loadout['drone_slots'] < 3 or loadout['weapon_slots'] < 4
+	return loadout['drone_slots'] + loadout['weapon_slots'] <= 6
 
 def alleviate_drone_slots(loadout):
+	if loadout['weapon_slots'] > 4:
+		loadout['weapon_slots'] = 4
 	options = {
 		'drop_drone_slot': 1 if loadout['layout'] == LAYOUTS.circle_cruiser else 3,
 		'drop_weapon_slot': 2,
@@ -234,6 +245,20 @@ def check_system_count(loadout):
 
 def alleviate_system_count(loadout):
 	drop_random_system(loadout)
+
+
+def check_fair_system_count(loadout):
+	if len(tuple(filter(lambda s: s not in SUBSYSTEMS, loadout['starting_systems']))) > 7:
+		return False
+	if not 7 <= len(loadout['starting_systems']) <= 10:
+		return False
+	return True
+
+def alleviate_fair_system_count(loadout):
+	if len(loadout['starting_systems']) < 7:
+		add_system(loadout)
+	else:
+		drop_random_system(loadout)
 
 
 def check_augment_count(loadout):
@@ -363,25 +388,16 @@ def alleviate_defensive_capability(loadout):
 
 # Must be able to deal with 2 shield layers
 def check_gunship_ability(loadout):
-	return get_guns_speed(loadout, hull=True)[1] > 0
+	# Check that we can damage systems
+	if get_guns_speed(loadout)[1] <= 0:
+		return False
+	# Check that we can damage hull without the use of missiles
+	if get_guns_speed(loadout, hull=True, needed_shield_drop=0, allow_missiles=False)[1] <= 0:
+		return False
+	return True
 
 def check_crewkill_ability(loadout):
-	crewkill_speed = 0
-	lethal = False
-	if SYSTEMS.teleporter in loadout['starting_systems'] and check_healing_capability(loadout):
-		boarding = 0
-		for crew_member in loadout['crew']:
-			boarding += config.race_bonus[crew_member]['tp']
-		crewkill_speed += max(len(loadout['crew']), loadout['teleporter_size']) * boarding
-		lethal = True
-	if 'BOARDER' in loadout['drones']:
-		crewkill_speed += 2
-	if SYSTEMS.mind in loadout['starting_systems']:
-		crewkill_speed += loadout['system_levels'][SYSTEMS.mind]
-	gun_slowness, gun_damage, _ = get_guns_speed(loadout, crewkill=True)
-	if gun_damage > 0:
-		crewkill_speed += gun_damage / gun_slowness / 10
-		lethal = True
+	crewkill_speed, lethal = get_crewkill_speed(loadout)
 	return lethal and crewkill_speed >= 2.0
 
 
@@ -399,7 +415,7 @@ def alleviate_healing_capability(loadout):
 		'medbay': 55,
 		'clonebay': 50,
 		'teleport_heal': 15 if SYSTEMS.teleporter in loadout['starting_systems'] else 0,
-		'bomb_heal': 3 if SYSTEMS.weapons in loadout['starting_systems'] else 0,
+		'bomb_heal': 5 if SYSTEMS.weapons in loadout['starting_systems'] else 0,
 	}
 	choice = weighted_chance(options)
 	if choice == 'medbay':
@@ -591,15 +607,9 @@ def alleviate_weapons_or_drones_power(loadout, system):
 
 
 def check_reactor_power(loadout):
-	reactor_power = loadout['reactor_power']
+	reactor_power, zoltan_power, battery_power, total_system_power = get_reactor_levels(loadout)
 	if reactor_power < 2 or reactor_power > 25:
 		return False
-	zoltan_power = 0
-	for crew_member in loadout['crew']:
-		if crew_member == RACES.energy:
-			zoltan_power += 1
-	total_system_power = get_total_system_power(loadout)
-	battery_power = loadout['system_levels'][SYSTEMS.battery] * 2 if SYSTEMS.battery in loadout['starting_systems'] else 0
 	if reactor_power + zoltan_power + min(1, battery_power) > total_system_power:
 		return False
 	# Hard limit of 2 power less than necessary
@@ -609,29 +619,20 @@ def check_reactor_power(loadout):
 
 def alleviate_reactor_power(loadout):
 	options = {}
-	reactor_power = loadout['reactor_power']
+	reactor_power, zoltan_power, battery_power, total_system_power = get_reactor_levels(loadout)
 	if reactor_power < 2:
 		loadout['reactor_power'] = 2
 		return
 	if reactor_power > 25:
 		loadout['reactor_power'] = 25
 		return
-	reactor_power = loadout['reactor_power']
-	zoltan_power = 0
-	for crew_member in loadout['crew']:
-		if crew_member == RACES.energy:
-			zoltan_power += 1
-	total_system_power = get_total_system_power(loadout)
-	battery_power = loadout['system_levels'][SYSTEMS.battery] * 2 if SYSTEMS.battery in loadout['starting_systems'] else 0
 	if reactor_power + zoltan_power + min(1, battery_power) > total_system_power:
 		options = {
 			'drop_reactor_power': 1,
-			# 'fast_drop_reactor_power': 1,
 		}
 	if reactor_power + zoltan_power + battery_power + 2 < total_system_power:
 		options = {
 			'add_reactor_power': 1,
-			# 'fast_add_reactor_power': 1,
 			'downgrade_random_system': 2,
 		}
 	choice = weighted_chance(options)
@@ -639,24 +640,12 @@ def alleviate_reactor_power(loadout):
 		drop_reactor_power(loadout, zoltan_power, battery_power)
 	elif choice == 'add_reactor_power':
 		add_reactor_power(loadout, zoltan_power, battery_power)
-	elif choice == 'fast_drop_reactor_power':
-		target = total_system_power - reactor_power - zoltan_power - min(1, battery_power)
-		loadout['reactor_power'] = target
-	elif choice == 'fast_add_reactor_power':
-		target = total_system_power - reactor_power - zoltan_power - battery_power - 2
-		loadout['reactor_power'] = target
 	elif choice == 'downgrade_random_system':
 		downgrade_random_system(loadout)
 
 
 def check_fair_reactor_power(loadout):
-	reactor_power = loadout['reactor_power']
-	zoltan_power = 0
-	for crew_member in loadout['crew']:
-		if crew_member == RACES.energy:
-			zoltan_power += 1
-	total_system_power = get_total_system_power(loadout)
-	battery_power = loadout['system_levels'][SYSTEMS.battery] * 2 if SYSTEMS.battery in loadout['starting_systems'] else 0
+	reactor_power, zoltan_power, battery_power, total_system_power = get_reactor_levels(loadout)
 	if reactor_power + zoltan_power > 11 or reactor_power + zoltan_power + battery_power > 12:
 		return False
 	if reactor_power + zoltan_power + battery_power + 1 < total_system_power:
@@ -665,22 +654,14 @@ def check_fair_reactor_power(loadout):
 
 def alleviate_fair_reactor_power(loadout):
 	options = {}
-	reactor_power = loadout['reactor_power']
-	zoltan_power = 0
-	for crew_member in loadout['crew']:
-		if crew_member == RACES.energy:
-			zoltan_power += 1
-	total_system_power = get_total_system_power(loadout)
-	battery_power = loadout['system_levels'][SYSTEMS.battery] * 2 if SYSTEMS.battery in loadout['starting_systems'] else 0
-	if reactor_power + zoltan_power + min(1, battery_power) > 11:
+	reactor_power, zoltan_power, battery_power, total_system_power = get_reactor_levels(loadout)
+	if reactor_power + zoltan_power > 11 or reactor_power + zoltan_power + battery_power > 12:
 		options = {
 			'drop_reactor_power': 2,
-			# 'fast_drop_reactor_power': 2,
 		}
 	elif reactor_power + zoltan_power + battery_power + 1 < total_system_power:
 		options = {
 			'add_reactor_power': 2,
-			# 'fast_add_reactor_power': 1,
 			'downgrade_random_system': 2,
 		}
 	choice = weighted_chance(options)
@@ -688,12 +669,6 @@ def alleviate_fair_reactor_power(loadout):
 		drop_reactor_power(loadout, zoltan_power, battery_power)
 	elif choice == 'add_reactor_power':
 		add_reactor_power(loadout, zoltan_power, battery_power)
-	elif choice == 'fast_drop_reactor_power':
-		target = 11 - reactor_power - zoltan_power - min(1, battery_power)
-		loadout['reactor_power'] = target
-	elif choice == 'fast_add_reactor_power':
-		target = total_system_power - reactor_power - zoltan_power - battery_power - 1
-		loadout['reactor_power'] = target
 	elif choice == 'downgrade_random_system':
 		downgrade_random_system(loadout)
 
@@ -762,7 +737,7 @@ def alleviate_no_useless_lasers(loadout):
 
 def check_reasonable_weapons(loadout):
 	gun_slowness, gun_damage, _ = get_guns_speed(loadout)
-	if gun_damage > 0 and gun_slowness / gun_damage < 4:
+	if gun_damage > 0 and gun_slowness < 3 * gun_damage:
 		return False
 	return True
 
@@ -800,54 +775,139 @@ def alleviate_basic_defence(loadout):
 ##########
 
 
+def get_reactor_levels(loadout):
+	reactor_power = loadout['reactor_power']
+	zoltan_power = 0
+	for crew_member in loadout['crew']:
+		if crew_member == RACES.energy:
+			zoltan_power += 1
+	total_system_power = get_total_system_power(loadout)
+	battery_power = loadout['system_levels'][SYSTEMS.battery] * 2 if SYSTEMS.battery in loadout['starting_systems'] else 0
+	return reactor_power, zoltan_power, battery_power, total_system_power
+
+
 def get_total_system_power(loadout):
 	total_system_power = 0
 	for system in loadout['starting_systems']:
 		if system not in SUBSYSTEMS:
-			total_system_power += loadout['system_levels'][system]
+			system_power = loadout['system_levels'][system]
+			if system == SYSTEMS.shields and system_power % 2 != 0:
+				system_power -= 1
+			elif system in (SYSTEMS.weapons, SYSTEMS.drones):
+				system_power = min(system_power, get_weapon_or_drones_total_power(loadout, system))
+			total_system_power += system_power
 	return total_system_power
+
+
+def get_weapon_or_drones_total_power(loadout, system):
+	quip_key = 'weapons' if system == SYSTEMS.weapons else 'drones'
+	points = config.weapon_points if system == SYSTEMS.weapons else config.drone_points
+	total_quip_power = 0
+	for quip in loadout[quip_key]:
+		quip_power = points[quip]['power']
+		total_quip_power += quip_power
+	return total_quip_power
 
 
 def get_survival_times(loadout):
 	MAGIC = 2.0
-	gun_slowness, gun_damage, unused = get_guns_speed(loadout)
+	time_to_survive = get_survival_time(loadout)
+	gun_slowness, gun_damage, unused = get_guns_speed(loadout, preferred_sort='highest_damage', max_slowness=time_to_survive)
 	time_to_disarm = math.inf if gun_damage <= 0 else gun_slowness * MAGIC / min(MAGIC, gun_damage)
+	crewkill_speed, can_crewkill = get_crewkill_speed(loadout)
 	if check_crewkill_ability(loadout):
 		time_to_disarm = min(time_to_disarm, get_sp_disarm_speed(loadout))
-	time_to_survive = get_survival_time(loadout)
 	return time_to_disarm, time_to_survive, unused
 
 
-def get_guns_speed(loadout, crewkill=False, hull=False):
-	# Note: Power use need not be considered too deeply as every weapon and drone is equivalent
-	#  as there can only ever be 1 too litte power in each system
+
+def get_crewkill_speed(loadout):
+	crewkill_damage = 0
+	can_crewkill = False
+	synergies = get_guns_bonuses(loadout)
+
+	if 'BOARDER' in loadout['drones']:
+		crewkill_damage += 2
+		can_crewkill = True
+
+	if SYSTEMS.teleporter in loadout['starting_systems'] and check_healing_capability(loadout):
+		boarders = []
+		for crew_member in loadout['crew']:
+			# TODO: Include synergies
+			base = config.race_bonus[crew_member]['tp']
+			boarders.append(config.race_bonus[crew_member]['tp'])
+		boarders.sort(reverse=True)
+		crewkill_damage += sum(boarders[:loadout['teleporter_size']])
+		can_crewkill = True
+
+	if SYSTEMS.mind in loadout['starting_systems']:
+		mc_level = min(3, max(1, loadout['system_levels'][SYSTEMS.mind]))
+		crewkill_damage += config.system_points[SYSTEMS.mind]['crewkill'][mc_level - 1]
+
+	gun_slowness, gun_damage, _ = get_guns_speed(loadout, crewkill=True, preferred_sort='highest_damage')
+	if gun_damage > 0:
+		crewkill_damage += gun_damage * 0.15
+		can_crewkill = True
+
+	return crewkill_damage, can_crewkill
+
+
+def get_guns_bonuses(loadout):
+	bonuses = {'fire': 0, 'breach': 0, 'stun': 0}
+
+	for quip_key in ('weapons', 'drones'):
+		points = config.weapon_points if quip_key == 'weapons' else config.drone_points
+		for quip in loadout[quip_key]:
+			stats = points[quip]
+			for bonus in bonuses:
+				bonuses[bonus] += stats.get(bonus, 0)
+
+	return bonuses
+
+
+
+def get_guns_speed(loadout, crewkill=False, hull=False,
+		needed_shield_drop=2, allow_missiles=True,
+		max_slowness=math.inf, preferred_sort='highest_dps'):
+	# TODO: Split into initial and followup volleys, the latter not using missiles
+	# TODO: Account for drone use in defense
+	# TODO: Account for ion stacking
+	# TODO: Consider followup and interluding volleys
 	weapons = []
 
+	# For debugging
+	# loadout['weapons'] = ['BOMB_ION', 'BEAM_HULL']
+
+
+
 	for weapon in loadout['weapons']:
-		stats = config.weapon_points.get(weapon)
+		stats = config.weapon_points[weapon]
 		weapon = {
 			'type': 'weapon',
 			'name': weapon,
 			'slowness': stats['slowness'],
 			'shield_drop': stats.get('shield_drop', 0),
 			'sp': stats.get('sp', 0),
+			'charges': stats.get('charges', 1),
 			'damage': stats.get('offence', 0) * stats.get('hull_multi', 1) + stats.get('fire', 0),
-			'crewkill': stats.get('crewkill', 0) + stats.get('fire', 0),
+			'crewkill': stats.get('crewkill', 0) + stats.get('fire', 0) + stats.get('offence', 0) * 0.1,
 			'system_damage': stats.get('offence', 0) + stats.get('nonlethal', 0) + stats.get('fire', 0),
-			'missiles': stats.get('missiles', 0),
+			'missiles': stats.get('missiles', 0) / (2 if AUGMENTS.EXPLOSIVE_REPLICATOR in loadout['augments'] else 1),
 			'power': stats['power'],
 			'drone_power': 0,
 			'drone_parts': 0,
 		}
+		# bombs and missiles
 		if stats.get('sp', 0) >= 5:
-			weapon['shield_drop'] += (weapon['system_damage'] + 1) // 2
+			weapon['shield_drop'] = (weapon['system_damage'] + 1) // 2
 		# Beams are special
 		if stats.get('beam_length'):
 			weapon['damage'] = stats['beam_length'] * stats.get('beam_damage', 0) * stats.get('hull_multi', 1) + stats.get('fire', 0)
-			weapon['crewkill'] = stats.get('crewkill', 0) + stats.get('fire', 0)
+			weapon['crewkill'] = stats.get('crewkill', 0) + stats.get('fire', 0) + stats.get('beam_damage', 0) * 0.2
 			weapon['system_damage'] = stats['beam_damage'] + stats.get('fire', 0)
 			weapon['shield_drop'] = stats['beam_damage'] // 2
-		weapons.append(weapon)
+		if allow_missiles or weapon['missiles'] == 0:
+			weapons.append(weapon)
 
 	for drone in loadout['drones']:
 		stats = config.drone_points[drone]
@@ -859,13 +919,14 @@ def get_guns_speed(loadout, crewkill=False, hull=False):
 			'slowness': stats['slowness'],
 			'shield_drop': stats.get('shield_drop', 0),
 			'sp': stats.get('sp', 0),
+			'charges': 1,
 			'damage': stats.get('offence', 0) * stats.get('hull_multi', 1) + stats.get('fire', 0),
-			'crewkill': stats.get('crewkill', 0) + stats.get('fire', 0),
+			'crewkill': stats.get('crewkill', 0) + stats.get('fire', 0) - stats.get('offence', 0),
 			'system_damage': stats.get('offence', 0) + stats.get('nonlethal', 0) + stats.get('fire', 0),
 			'missiles': 0,
 			'power': 0,
 			'drone_power': stats['power'],
-			'drone_parts': 1,
+			'drone_parts': 0.5 if AUGMENTS.DRONE_RECOVERY in loadout['augments'] else 1,
 		}
 		weapons.append(drone)
 
@@ -876,10 +937,12 @@ def get_guns_speed(loadout, crewkill=False, hull=False):
 			'name': 'hacking',
 			'slowness': 8,
 			'shield_drop': config.system_points[SYSTEMS.hacking]['shield_drop'][hacking_level - 1],
-			'sp': 0,
+			'sp': 5,
+			'charges': 1,
 			'damage': 0,
-			'crewkill': 0,
-			'system_damage': 0,
+			# Pseudo damage
+			'crewkill': 0.5 * (hacking_level - 1), # oxygen/medbay/clonebay
+			'system_damage': hacking_level,
 			'missiles': 0,
 			'power': 0,
 			'drone_power': 0,
@@ -887,23 +950,85 @@ def get_guns_speed(loadout, crewkill=False, hull=False):
 		}
 		weapons.append(hacking)
 
-	weapons_by_shield_drop = sorted(weapons,
-		key=lambda w: w['shield_drop'] / w['slowness']
-	)
-	damage_key = 'damage' if hull else ('crewkill' if crewkill else 'system_damage')
-	weapons_by_damage = sorted(weapons,
-		key=lambda w: w[damage_key] / w['slowness'] / (w['missiles'] + 1)
-	)
+	# Illegal setup, skip expensive calculation
+	if len(weapons) > 7:
+		return 1, 99, weapons
 
-	needed_shield_drop = 2
-	remaining_power = loadout['system_levels'][SYSTEMS.weapons]
-	remaining_drone_power = loadout['system_levels'][SYSTEMS.drones]
+	damage_key = 'damage' if hull else ('crewkill' if crewkill else 'system_damage')
+
+	weapons_power = loadout['system_levels'][SYSTEMS.weapons]
+	drones_power = loadout['system_levels'][SYSTEMS.drones]
+	# There can only be at most 7 "weapons" (4w2d1h or 3w3d1h). That's "only" 7! = 5040 permutations.
+	# Fortunately, this can be limited:
+	# - use at most 2 total drone parts + missiles (for UX reasons)
+	# - beams with less than 2 normal damage can always be checked last
+	# - sp 5 weapons can always be checked first,
+	#    however then we must check targetting the shields system vs the desired target (as well as the usual option of not using the weapon).
+	# - if system power is limited.
+	#    (eg. it's very unlikely for the program to allow >4 system power which means max 2 offensive drones)
+	# - the order of duplicates doesn't matter.
+	# - weapons which deal no damage of the desired type can be ignored once shields are down
+	# - weapons which neither deal damage of the desired type nor can drop shields can be ignored outright
+	#    (eg. bio beam for non-crew damage, stun bomb, ...)
+	weapons_by_priority = {
+		"high": [],
+		"normal": [],
+		"low": [],
+	}
+	for weapon in weapons:
+		if weapon['shield_drop'] <= 0:
+			if weapon[damage_key] > 0:
+				weapons_by_priority['low'].append(weapon)
+			continue
+		if weapon['sp'] >= 5:
+			weapons_by_priority['high'].append(weapon)
+			continue
+		weapons_by_priority['normal'].append(weapon)
+
+	remaining = {
+		"weapons": weapons_by_priority,
+		"weapons_power": weapons_power,
+		"drones_power": drones_power,
+		"shields": needed_shield_drop,
+		"ammo": 2,
+	}
+	DEBUG = False
+	if DEBUG and len(weapons) > 1:
+		print(f"[DEBUG] Getting options for {len(weapons)} \"weapons\"")
+		for i in range(10):
+			print('')
+	start = time.time()
+	options = recursively_find_weapon_options(remaining, damage_key)
+	end = time.time()
+
+	real_options = list(filter(lambda o: o['damage'] > 0 and o['slowness'] < max_slowness, options))
+	best = {}
+	if len(real_options) > 0:
+		best['highest_damage'] = max(real_options, key=lambda o: o['damage'])
+		best['highest_dps'] = max(real_options, key=lambda o: o['damage'] / o['slowness'] if o['damage'] > 0 else -1)
+		# best['fastest_to_3'] = min(real_options, key=lambda o: o['slowness'] if o['damage'] >= 3 else math.inf)
+		best['fastest'] = min(real_options, key=lambda o: o['slowness'] if o['damage'] > 0 else math.inf)
+		# best['cheapest'] = min(real_options, key=lambda o: o['ammo'] * 1000 + o['slowness'] if o['damage'] > 0 else math.inf)
+
+	def print_option(o, comment=''):
+		print(f"{comment} - {o['damage']}dmg {o['slowness']}s {o['missiles']}m {o['drone_parts']}dr {len(o['weapons_used'])}w {o['__shields']}sh")
+
+
+	### REMOVE ME
+	unused = weapons.copy()
 	damage = 0
 	slowness = 0
 	used_drone_parts = 0
 	used_missiles = 0
-	unused = []
-	while len(weapons) > 0:
+	remaining_power = weapons_power
+	remaining_drone_power = drones_power
+	weapons_by_shield_drop = sorted(unused,
+		key=lambda w: w['shield_drop'] / w['slowness']
+	)
+	weapons_by_damage = sorted(unused,
+		key=lambda w: w[damage_key] / w['slowness'] / (w['missiles'] + 1)
+	)
+	while len(unused) > 0:
 		if needed_shield_drop > 0:
 			weapon = weapons_by_shield_drop.pop()
 			shield_drop = True
@@ -912,21 +1037,16 @@ def get_guns_speed(loadout, crewkill=False, hull=False):
 			weapon = weapons_by_damage.pop()
 			shield_drop = False
 			weapons_by_shield_drop.remove(weapon)
-		weapons.remove(weapon)
+		unused.remove(weapon)
 		if weapon['power'] > remaining_power or weapon['drone_power'] > remaining_drone_power:
-			unused.append(weapon)
 			continue
 		if weapon['missiles'] > 0 and (damage >= 3 or used_missiles > 2):
-			unused.append(weapon)
 			continue
 		if weapon['drone_parts'] > 0 and (damage >= 3 or used_drone_parts > 2):
-			unused.append(weapon)
 			continue
 		if (weapon['slowness'] > slowness + 1 and damage >= 3) or (weapon['slowness'] >= 2 * slowness and damage > 1):
-			unused.append(weapon)
 			continue
 		if not shield_drop and weapon[damage_key] <= 0:
-			unused.append(weapon)
 			continue
 		used_missiles += weapon['missiles']
 		used_drone_parts += weapon['drone_parts']
@@ -937,13 +1057,60 @@ def get_guns_speed(loadout, crewkill=False, hull=False):
 			sd = weapon['shield_drop']
 			unspent_shield_drop = sd - needed_shield_drop
 			needed_shield_drop -= sd
-			if unspent_shield_drop > 0:
+			if unspent_shield_drop > 0 and weapon['sp'] == 0:
 				damage += weapon[damage_key] * unspent_shield_drop / sd
 		else:
 			damage += weapon[damage_key]
 
-	if damage <= 0 or slowness <= 0:
-		return math.inf, 0, unused
+	# if damage <= 0 or slowness <= 0:
+	# 	return math.inf, 0, unused
+
+	warning = False
+	if damage > 0 and used_missiles + used_drone_parts <= 2 and slowness <= max_slowness:
+		if len(best) > 0:
+			if damage > best['highest_damage']['damage']:
+				error(loadout, "Oh noes! Old algo found a better raw damage output.")
+				warning = True
+			if damage / slowness > best['highest_dps']['damage'] / best['highest_dps']['slowness']:
+				error(loadout, "Oh noes! Old algo found a better DPS.")
+				warning = True
+			if slowness < best['fastest']['slowness']:
+				error(loadout, "Oh noes! Old algo found a faster option.")
+				warning = True
+		else:
+			error(loadout, "Oh noes! Old algo found a solution where new did not.")
+			warning = True
+	if end - start > 0.1:
+		warn(loadout, f'Took too long to find guns speed')
+		warning = True
+	if warning:
+		total_weapons_power = sum(map(lambda w: w['power'], weapons))
+		total_drones_power = sum(map(lambda w: w['drone_power'], weapons))
+		print(f"{damage_key}, {weapons_power} weapon power ({total_weapons_power} needed), {drones_power} drone power ({total_drones_power} needed)")
+		print('weapons:', list(map(lambda w: w['name'], weapons)))
+		print(f"Old algo got {damage}dmg {slowness}s {used_missiles}m {used_drone_parts}dr {len(weapons) - len(unused)}w")
+		print(f"Got {len(real_options)} ways to use available weapons in {end - start} seconds")
+		for k in best:
+			print_option(best[k], comment=k)
+		if len(real_options) < 10:
+			for o in real_options:
+				print_option(o)
+		print(loadout)
+		raise Exception()
+	### END REMOVE ME
+
+	if len(real_options) == 0:
+		return math.inf, 0, []
+
+	best_option = best[preferred_sort]
+	damage, slowness = best_option['damage'], best_option['slowness']
+	weapons_by_name = {}
+	for w in weapons:
+		weapons_by_name[w['name']] = w
+	unused = weapons
+	for weapon_name in best_option['weapons_used']:
+		unused.remove(weapons_by_name[weapon_name])
+
 	if len(loadout['crew']) > 2:
 		slowness *= 0.9
 	for augment in loadout['augments']:
@@ -952,6 +1119,122 @@ def get_guns_speed(loadout, crewkill=False, hull=False):
 
 	return slowness, damage, unused
 
+
+def recursively_find_weapon_options(remaining, damage_key, depth=1):
+	options_list = []
+	weapon = None
+	DEBUG = False
+
+	weapon_options = tuple()
+	for priority in ('high', 'normal', 'low'):
+		if len(remaining['weapons'][priority]) > 0:
+			weapon_options = remaining['weapons'][priority]
+			break
+
+	if DEBUG:
+		print('-' * depth, remaining)
+	if len(weapon_options) == 0:
+		# print('-' * depth, 'no more weapons!')
+		return [{
+			'weapons_used': [],
+			'damage': 0,
+			'slowness': 0,
+			'missiles': 0,
+			'drone_parts': 0,
+			'ammo': 0,
+			'__shields': remaining['shields'],
+		}]
+
+	checked_weapons = set()
+	for i, weapon in enumerate(weapon_options):
+		# don't re-check duplicates
+		if weapon['name'] in checked_weapons:
+			continue
+		checked_weapons.add(weapon['name'])
+		new_weapon_options = tuple(w for j, w in enumerate(weapon_options) if j != i)
+
+		choices = [('pass', 0)]
+		weapon_ammo = weapon['missiles'] + weapon['drone_parts']
+		can_afford = remaining['ammo'] >= weapon_ammo
+		can_power = remaining['weapons_power'] >= weapon['power'] and remaining['drones_power'] >= weapon['drone_power']
+		if can_afford and can_power:
+			if remaining['shields'] > weapon['sp']:
+				for c in range(weapon['charges']):
+					choices.append(('shields', c+1))
+			else:
+				# if shield-piercing weapon should choose to hit shield system
+				if remaining['shields'] > 0 and weapon['system_damage'] > 0:
+					for c in range(weapon['charges']):
+						choices.append(('shields', c+1))
+				if weapon[damage_key] > 0:
+					for c in range(weapon['charges']):
+						choices.append(('damage', c+1))
+		elif DEBUG:
+			print('-' * depth, can_afford, can_power, remaining, weapon)
+
+		if DEBUG:
+			print('-' * depth, weapon['name'], choices)
+
+		for choice, charges in choices:
+			if DEBUG:
+				print('-' * depth, choice)
+			new_remaining = remaining.copy()
+			new_remaining['weapons'] = remaining['weapons'].copy()
+			new_remaining['weapons'][priority] = new_weapon_options
+			if choice == 'pass':
+				pass
+			else:
+				new_remaining['weapons_power'] -= weapon['power']
+				new_remaining['drones_power'] -= weapon['drone_power']
+				# print('-' * depth, f"subtracting {weapon_ammo} ammo from {new_remaining['ammo']}")
+				new_remaining['ammo'] -= weapon_ammo
+				if choice == 'shields':
+					new_remaining['shields'] = max(0, remaining['shields'] - weapon['shield_drop'] * charges)
+
+			sub_options = recursively_find_weapon_options(new_remaining, damage_key, depth+1)
+			for option in sub_options:
+				# print('-' * depth, option)
+				if choice != 'pass':
+					option['weapons_used'].append(weapon['name'])
+					option['slowness'] = max(option['slowness'], weapon['slowness'] * charges)
+					option['ammo'] += weapon_ammo
+					option['missiles'] += weapon['missiles']
+					option['drone_parts'] += weapon['drone_parts']
+
+					if choice == 'damage':
+						option['damage'] += weapon[damage_key] * charges
+
+					else:
+						# First shot(s) hit shields, remaining ones hit targetted room
+						if choice == 'shields' and new_remaining['shields'] == 0 and weapon['shield_drop'] * charges > 1 and weapon['sp'] == 0:
+							unspent_shots = weapon['shield_drop'] * charges - remaining['shields']
+							if unspent_shots > 0:
+								option['damage'] += weapon[damage_key] * unspent_shots / weapon['shield_drop']
+
+				if DEBUG:
+					print('-' * depth, option)
+				# If the decision tree is returning and the last weapon used wasn't able to deal damage, it's dead weight
+				if choice == 'pass' or option['damage'] > 0:
+					options_list.append(option)
+				elif DEBUG:
+					print('-' * depth, 'discarding option')
+
+	# Remove any options that are strictly worse than (or equal to) any other
+	for other_option in reversed(options_list):
+		for option in reversed(options_list):
+			if option is other_option:
+				continue
+			weaker = option['damage'] <= other_option['damage']
+			slower = option['slowness'] >= other_option['slowness']
+			costlier_m = option['missiles'] >= other_option['missiles']
+			costlier_d = option['drone_parts'] >= other_option['drone_parts']
+			if weaker and slower and costlier_m and costlier_d:
+				if DEBUG:
+					print('-' * depth, 'discarding weak option', option)
+					print('-' * depth, f'because {other_option} is better')
+				options_list.remove(option)
+
+	return options_list
 
 
 def get_sp_disarm_speed(loadout):
@@ -996,14 +1279,18 @@ def get_weapon_charge_bonus(loadout):
 
 
 def get_survival_time(loadout):
+	# Note: This does not consider boarders, hazards etc.
+	# TODO: instead of calculating based on averages (with average values drawn out of my arse),
+	#  use several real s1 enemy ships and take the median of the results
 	avg_enemy_slowness = 13.0
 	avg_enemy_damage_lasers = 2.0
 	avg_enemy_damage_missiles = 0.8
 	avg_enemy_damage_ion = 0.5
-	avg_enemy_damage_beams = 0.5
+	avg_enemy_damage_beams = 0.8
 	avg_enemy_damage_bombs = 0.5
 	avg_enemy_damage_drones = 0.2
-	time = 5 * avg_enemy_slowness / (
+
+	volley_damage = (
 		avg_enemy_damage_lasers * (1 - get_laser_resistance(loadout)) +
 		avg_enemy_damage_missiles * (1 - get_missile_resistance(loadout)) +
 		avg_enemy_damage_ion * (1 - get_ion_resistance(loadout)) +
@@ -1011,28 +1298,58 @@ def get_survival_time(loadout):
 		avg_enemy_damage_bombs * (1 - get_bomb_resistance(loadout)) +
 		avg_enemy_damage_drones * (1 - get_drone_resistance(loadout))
 	)
+	pain_time = avg_enemy_slowness / volley_damage
+	time = pain_time * 5
 	extra_time = 0
+	cloak_rate = 0
+	cloaked_evasion = 0
+
 	if SYSTEMS.cloaking in loadout['starting_systems']:
-		extra_time += avg_enemy_slowness / 2 + loadout['system_levels'][SYSTEMS.cloaking] * 5
-	zshield_time = avg_enemy_slowness / (
-		avg_enemy_damage_lasers +
-		avg_enemy_damage_missiles +
-		avg_enemy_damage_ion * 2 / (2 if AUGMENTS.ION_ARMOR in loadout['augments'] else 1) +
-		avg_enemy_damage_beams * 2 +
-		avg_enemy_damage_bombs
+		cloak_time = loadout['system_levels'][SYSTEMS.cloaking] * 5
+		cloak_rate = cloak_time / (cloak_time + config.system_points[SYSTEMS.cloaking]['cooldown'])
+		cloaked_evasion = min(1, get_evasion(loadout) + 0.6)
+		# Let's say you cloak the first volley and after that the biggest benefit is slowing enemy weapon recharge
+		extra_time += avg_enemy_slowness * cloaked_evasion + time * cloak_rate
+
+	zshield_damage = (
+		avg_enemy_damage_lasers * (1 - get_laser_resistance(loadout, True)) +
+		avg_enemy_damage_missiles * (1 - get_missile_resistance(loadout, True)) +
+		avg_enemy_damage_ion * 2 * (1 - get_ion_resistance(loadout, True)) +
+		avg_enemy_damage_beams +
+		avg_enemy_damage_bombs * (1 - get_bomb_resistance(loadout)) +
+		avg_enemy_damage_drones * (1 - get_drone_resistance(loadout, True))
 	)
+	zshield_layer_time = avg_enemy_slowness / zshield_damage * (1 - cloak_rate)
+	# Let's assume you can cloak on average 15% of incoming supershield damage which you wouldn't have evaded otherwise
+	#  (can't cloak beams, drones, desynced weapons)
+	zshield_layer_time *= 1 - (0.15 * cloaked_evasion)
+	assert(zshield_layer_time > 0)
+
 	if AUGMENTS.ENERGY_SHIELD in loadout['augments']:
-		extra_time += zshield_time
+		extra_time += 5 * zshield_layer_time
+
 	if 'DRONE_SHIELD_PLAYER' in loadout['drones']:
-		extra_time += zshield_time * 0.2
+		drone_stats = config.drone_points['DRONE_SHIELD_PLAYER']
+		# Time to recharge the first layer
+		layer_charge_time = drone_stats['layer_times'][0]
+		# It starts recharging already before the first layer is gone. Use the slowest rate for simplicity
+		layer_charge_time *= (1 - zshield_layer_time / drone_stats['layer_times'][-1])
+		# If the average enemy can't deal with the shields faster than they appear, your ship is OP
+		if layer_charge_time <= 0:
+			return math.inf
+		# Ratio of time spent shielded vs. nakedly recharging
+		r = zshield_layer_time / (layer_charge_time + zshield_layer_time)
+		# Sum of a geometric series for -1 < r < 1
+		time = time / (1 - r)
+
 	return time + extra_time
 
 
-def get_laser_resistance(loadout):
+def get_laser_resistance(loadout, for_zshield=False):
 	evasion = get_evasion(loadout)
 	shield_bonus = 0
 	drone_bonus = 0
-	if SYSTEMS.shields in loadout['starting_systems']:
+	if SYSTEMS.shields in loadout['starting_systems'] and for_zshield:
 		shield_layers = loadout['system_levels'][SYSTEMS.shields] // 2
 		if shield_layers == 1:
 			shield_bonus = 0.25
@@ -1042,20 +1359,20 @@ def get_laser_resistance(loadout):
 			shield_bonus = 0.9
 	for drone in loadout['drones']:
 		stats = config.drone_points[drone]
-		drone_bonus += stats.get('laser_defence', 0)
+		drone_bonus += stats.get('laser_defence', 0) * (0.5 if for_zshield else 1)
 	return max(0, min(1, evasion + shield_bonus + drone_bonus))
 
-def get_missile_resistance(loadout):
+def get_missile_resistance(loadout, for_zshield=False):
 	evasion = get_evasion(loadout)
 	drone_bonus = 0
 	for drone in loadout['drones']:
 		stats = config.drone_points[drone]
 		defence = stats.get('defence', 0)
 		if defence > 0:
-			drone_bonus += 1 - 1 / defence
+			drone_bonus += 1 - 1 / defence * (0.5 if for_zshield else 1)
 	return max(0, min(1, 1 - (1 - evasion) * (1 - drone_bonus)))
 
-def get_ion_resistance(loadout):
+def get_ion_resistance(loadout, for_zshield=False):
 	return max(0, min(1, 1 - (1 - get_laser_resistance(loadout)) * (1 - 0.5 * (AUGMENTS.ION_ARMOR in loadout['augments'])) ))
 
 def get_beam_resistance(loadout):
@@ -1072,10 +1389,10 @@ def get_beam_resistance(loadout):
 def get_bomb_resistance(loadout):
 	return get_evasion(loadout)
 
-def get_drone_resistance(loadout):
+def get_drone_resistance(loadout, for_zshield=False):
 	shield_bonus = 0
 	drone_bonus = 0
-	if SYSTEMS.shields in loadout['starting_systems']:
+	if SYSTEMS.shields in loadout['starting_systems'] and not for_zshield:
 		shield_layers = loadout['system_levels'][SYSTEMS.shields] // 2
 		if shield_layers == 1:
 			shield_bonus = 0.2
@@ -1085,7 +1402,7 @@ def get_drone_resistance(loadout):
 			shield_bonus = 0.7
 	for drone in loadout['drones']:
 		if drone == 'ANTI_DRONE':
-			drone_bonus = 1 - (1 - drone_bonus) * 0.1
+			drone_bonus = 1 - (1 - drone_bonus) * 0.15
 	return max(0, min(1, 1 - (1 - shield_bonus) * (1 - drone_bonus)))
 
 
@@ -1170,7 +1487,8 @@ def get_useless_lasers(loadout):
 	useless = []
 	_, _, unused = get_guns_speed(loadout)
 	for w in unused:
-		if w['type'] == 'weapon' and w['name'][:5] == 'LASER':
+		# if w['type'] == 'weapon' and w['name'][:5] == 'LASER':
+		if w['type'] == 'weapon':
 			useless.append(w['name'])
 	return useless
 
@@ -1180,7 +1498,7 @@ def get_weapon_options(loadout):
 	for category in config.weapon_categories.values():
 		weight = category['weights'].get(loadout['layout']) or category['weights']['default']
 		for weapon in category['included']:
-			options[weapon] = weight / config.weapon_points[weapon]['power']
+			options[weapon] = weight / config.weapon_points[weapon]['power'] / config.weapon_points[weapon].get('rarity', 1)
 	return options
 
 def get_drone_options(loadout):
@@ -1190,7 +1508,7 @@ def get_drone_options(loadout):
 		for drone in category['included']:
 			existing_count = loadout['drones'].count(drone)
 			# Slightly decreased chance for duplicates
-			options[drone] = weight / (existing_count + 1)
+			options[drone] = weight / (existing_count + 1) / config.drone_points[drone].get('rarity', 1)
 	return options
 
 def get_augment_options(loadout):
@@ -1393,6 +1711,7 @@ def weighted_chance(thing):
 	total_weight = sum([a[1] for a in thing.items()])
 	if total_weight == 0:
 		print("[ERROR] weighted_chance got thing with zero chance", thing)
+		raise IndexError()
 	i = random.random() * total_weight
 	for item, weight in thing.items():
 		i -= weight

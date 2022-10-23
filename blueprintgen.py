@@ -80,8 +80,8 @@ def generateBlueprint(all_rooms, layout, variant, layout_string, out_dir, all_do
 	for augment in loadout['augments']:
 		return_string += f'\t<aug name="{augment.value}" />\n'
 
-	return_string += f'\t<shieldImage>{layout}</shieldImage>\n'
-	return_string += f'\t<cloakImage>{layout}</cloakImage>\n'
+	return_string += f'\t<shieldImage>{layout.value}</shieldImage>\n'
+	return_string += f'\t<cloakImage>{layout.value}</cloakImage>\n'
 	return_string += f'\t<floorImage>{layout_string}</floorImage>\n'
 	return_string += '</shipBlueprint>\n\n\n'
 

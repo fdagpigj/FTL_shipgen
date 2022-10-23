@@ -15,8 +15,8 @@ PIECES = ("base", "gib1", "gib2", "gib3", "gib4", "gib5", "gib6")
 
 
 def main():
-	total_warnings = 0
-	total_errors = 0
+	all_warnings = []
+	all_errors = []
 	if not os.path.exists("data"):
 		path = Path("data")
 		path.parent.mkdir(parents=True, exist_ok=True)
@@ -24,11 +24,9 @@ def main():
 		path = Path("data")
 		path.parent.mkdir(parents=True, exist_ok=True)
 	if not os.path.exists("img_originals/ship/interior"):
-		print("[WARNING] Please copy extracted vanilla FTL img folder into a img_originals folder")
-		total_warnings += 1
+		warn(all_warnings, "Please copy extracted vanilla FTL img folder into a img_originals folder")
 	if not os.path.exists("data_originals"):
-		print("[WARNING] Please copy extracted vanilla FTL data folder into a data_originals folder")
-		total_warnings += 1
+		warn(all_warnings, "Please copy extracted vanilla FTL data folder into a data_originals folder")
 
 	with open("data/blueprints.xml.append", "w+") as f:
 		f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
@@ -70,15 +68,25 @@ def main():
 				door.position = door.position[0] - offset[0], door.position[1] - offset[1]
 			datafilegen.generateDatafiles(all_rooms, all_doors, offset, layout, "data", layout_string)
 			warnings, errors = blueprintgen.generateBlueprint(all_rooms, layout, variant, layout_string, "data", all_doors)
-			total_warnings += warnings
-			total_errors += errors
+			all_warnings += warnings
+			all_errors += errors
 
-	print(f'Completed with {total_warnings} warnings and {total_errors} errors')
+	print(f'Completed with {len(all_warnings)} warnings and {len(all_errors)} errors')
+	if len(all_warnings) > 0:
+		print('Warnings:')
+		for message in all_warnings:
+			print(message)
+	if len(all_errors) > 0:
+		print('Errors:')
+		for message in all_errors:
+			print(message)
 
 
 
 
-
+def warn(warnings, message):
+	print(f'[WARNING] {message}')
+	warnings.append(message)
 
 
 

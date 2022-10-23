@@ -113,7 +113,7 @@ race_bonus = {
 	RACES.human: {"tp":1.0, "airlock_need":1.0, "scrap":45},
 	RACES.engi: {"tp":0.6, "airlock_need":0.7, "repair":2.0, "scrap":50},
 	RACES.mantis: {"tp":1.6, "speed":1.2, "airlock_need":1.5, "repair":0.5, "scrap":55},
-	RACES.rock: {"tp":1.3, "tp_synergies":{"fire":1.0}, "speed":0.5, "airlock_need":0.4, "health":150, "scrap":55},
+	RACES.rock: {"tp":1.4, "tp_synergies":{"fire":1.0}, "speed":0.5, "airlock_need":0.4, "health":150, "scrap":55},
 	RACES.energy: {"tp":0.7, "tp_synergies":{"clonebay":0.3}, "airlock_need":1.5, "health":70, "scrap":60},
 	RACES.slug: {"tp":1.0, "airlock_need":1.0, "scrap":45},
 	RACES.anaerobic: {"tp":1.5, "tp_synergies":{"breach":1.0, "stun":0.5}, "speed":0.8, "airlock_need":0.1, "scrap":50},
@@ -123,7 +123,7 @@ race_bonus = {
 system_points = {
 	SYSTEMS.oxygen: {"support":10, "scrap":[30,25,50]},
 	SYSTEMS.teleporter: {"scrap":[90,30,60]},
-	SYSTEMS.cloaking: {"defence":15, "scrap":[150,30,50]},
+	SYSTEMS.cloaking: {"defence":15, "scrap":[150,30,50], "cooldown": 20},
 	SYSTEMS.pilot: {"scrap":[0,20,50]},
 	SYSTEMS.medbay: {"support":10, "scrap":[50,35,45], "healing_rate": [1.0, 1.5, 3.0]},
 	# Notice: If shields is not a starting system, it should start at level 2. Hence level 1 cost is really only 25? (Drone Control too)
@@ -137,7 +137,7 @@ system_points = {
 	SYSTEMS.clonebay: {"support":10, "scrap":[50,35,45]},
 	SYSTEMS.hacking: {"support":10, "defence":5, "crewkill":2, "scrap":[80,35,60], "shield_drop": [1, 3, 4]},
 	SYSTEMS.battery: {"support":5, "scrap":[35,50]},
-	SYSTEMS.mind: {"support":7, "crewkill":3, "scrap":[75,30,60]}
+	SYSTEMS.mind: {"support":7, "crewkill":[1,2,3], "scrap":[75,30,60]}
 }
 
 system_weights = {
@@ -149,9 +149,9 @@ system_weights = {
 		SYSTEMS.teleporter: 3,
 		SYSTEMS.cloaking: 2,
 		SYSTEMS.medbay: 5,
-		SYSTEMS.shields: 15,
+		SYSTEMS.shields: 8,
 		SYSTEMS.artillery: 0,
-		SYSTEMS.weapons: 20,
+		SYSTEMS.weapons: 8,
 		SYSTEMS.drones: 1,
 		SYSTEMS.sensors: 3,
 		SYSTEMS.doors: 4,
@@ -163,7 +163,7 @@ system_weights = {
 	LAYOUTS.anaerobic_cruiser:	{ SYSTEMS.oxygen: 1 },
 	LAYOUTS.circle_cruiser:		{ SYSTEMS.drones: 8 },
 	LAYOUTS.crystal_cruiser:	{ SYSTEMS.oxygen: 4, SYSTEMS.teleporter: 4 },
-	LAYOUTS.energy_cruiser:		{ SYSTEMS.battery: 3, SYSTEMS.shields: 12 },
+	LAYOUTS.energy_cruiser:		{ SYSTEMS.battery: 3, SYSTEMS.shields: 6 },
 	LAYOUTS.fed_cruiser:		{}, # TODO: artillery
 	LAYOUTS.jelly_cruiser:		{ SYSTEMS.sensors: 1, SYSTEMS.mind: 5, SYSTEMS.hacking: 4 },
 	LAYOUTS.kestral:			{},
@@ -263,10 +263,10 @@ drone_points = {
 	"DEFENSE_2": {"defence":8, "scrap":70, "power":3, "laser_defence": 0.2},
 	"REPAIR": {"support":5, "scrap":30, "power":1, "onboard": 1},
 	"BATTLE": {"support":5, "scrap":35, "power":2, "onboard": 1},
-	"BOARDER": {"crewkill":2, "scrap":70, "power":3},
-	"BOARDER_ION": {"offence":1, "scrap":65, "power":3},
+	"BOARDER": {"crewkill":2, "scrap":70, "power":3, "breach": 1},
+	"BOARDER_ION": {"offence":1, "scrap":65, "power":3, "breach": 1, "stun": 1},
 	"ANTI_DRONE": {"defence":2, "scrap":35, "power":1},
-	"DRONE_SHIELD_PLAYER": {"defence":6, "scrap":60, "power":2}
+	"DRONE_SHIELD_PLAYER": {"defence":6, "scrap":60, "power":2, "layer_times":[8,10,13,16,20]}
 }
 
 drone_categories = {
@@ -280,7 +280,6 @@ drone_categories = {
 			"COMBAT_2",
 			"COMBAT_BEAM",
 			"COMBAT_BEAM_2",
-			"COMBAT_FIRE",
 		]
 	},
 	"CREW": {
@@ -307,6 +306,16 @@ drone_categories = {
 			"ANTI_DRONE",
 			"DRONE_SHIELD_PLAYER",
 		]
+	},
+	"FIRE": {
+		"weights": {
+			"default": 0.5,
+			LAYOUTS.jelly_cruiser: 1,
+			LAYOUTS.rock_cruiser: 1.5,
+		},
+		"included": [
+			"COMBAT_FIRE",
+		]
 	}
 }
 
@@ -314,51 +323,53 @@ weapon_points = {
 	"MISSILES_1": {"offence":1, "sp":5, "missiles":1, "power":1, "scrap":20, "fire":0.1, "breach":0.1, "stun":0.1, "slowness":9},
 	"MISSILES_2_PLAYER": {"offence":2, "sp":5, "missiles":1, "power":1, "scrap":38, "fire":0.1, "breach":0.1, "stun":0.1, "slowness":11},
 	"MISSILES_3": {"offence":3, "sp":5, "missiles":1, "power":3, "scrap":45, "fire":0.3, "breach":0.2, "stun":0.1, "slowness":14},
-	"MISSILES_BURST": {"offence":4, "sp":5, "missiles":1, "power":3, "scrap":60, "fire":0.6, "breach":0.4, "stun":0.2, "slowness":20},
+	"MISSILES_BURST": {"offence":4, "shots": 2, "sp":5, "missiles":1, "power":3, "scrap":60, "fire":0.6, "breach":0.4, "stun":0.2, "slowness":20},
 	"MISSILES_BREACH": {"offence":4, "sp":5, "missiles":1, "power":3, "scrap":65, "fire":0.3, "breach":0.8, "stun":0.1, "slowness":22},
 	"MISSILES_HULL": {"offence":2, "hull_multi": 2, "sp":5, "missiles":1, "power":2, "scrap":65, "fire":0.1, "breach":0.3, "stun":0.1, "slowness":17},
-	"MISSILE_CHARGEGUN": {"offence":2, "sp":5, "missiles":1, "power":2, "scrap":65, "fire":0.2, "breach":0.2, "slowness":14},
+	"MISSILE_CHARGEGUN": {"offence":1, "charges":3, "shots": 1, "sp":5, "missiles":1, "power":2, "scrap":65, "fire":0.1, "breach":0.09, "slowness":7},
 
 	"LASER_BURST_1": {"offence":1, "shield_drop":1, "power":1, "scrap":20, "fire":0.1, "slowness":10},
-	"LASER_BURST_2": {"offence":2, "shield_drop":2, "power":1, "scrap":25, "fire":0.2, "slowness":10},
-	"LASER_BURST_2_A": {"offence":2, "shield_drop":2, "power":2, "scrap":50, "fire":0.2, "slowness":11},
-	"LASER_BURST_3": {"offence":3, "shield_drop":3, "power":2, "scrap":80, "fire":0.3, "slowness":12},
-	"LASER_BURST_5": {"offence":3, "shield_drop":5, "power":4, "scrap":95, "slowness":19},
-	"LASER_HEAVY_1": {"offence":2, "shield_drop":1, "power":1, "scrap":55, "fire":0.3, "breach":0.3, "stun":0.2, "slowness":9},
-	"LASER_HEAVY_2": {"offence":4, "shield_drop":2, "power":3, "scrap":65, "fire":0.6, "breach":0.6, "stun":0.4, "slowness":13},
-	"LASER_HEAVY_1_SP": {"offence":2, "sp":1, "shield_drop":1, "power":2, "scrap":55, "fire":0.3, "breach":0.3, "slowness":10},
-	"LASER_HULL_1": {"offence":2, "hull_multi":2, "shield_drop":2, "power":2, "scrap":55, "breach":0.4, "slowness":14},
-	"LASER_HULL_2": {"offence":3, "hull_multi":2, "shield_drop":3, "power":3, "scrap":75, "breach":0.9, "slowness":15},
-	"LASER_CHAINGUN": {"offence":3, "shield_drop":2, "power":2, "scrap":65, "fire":0.2, "slowness":16},
-	"LASER_CHAINGUN_2": {"offence":10, "crewkill":-5, "shield_drop":5, "power":4, "scrap":95, "fire":0.1, "slowness":37},
-	"LASER_CHARGEGUN_PLAYER": {"offence":2, "shield_drop":2, "power":1, "scrap":30, "slowness":11},
-	"LASER_CHARGEGUN_2": {"offence":2, "shield_drop":4, "power":3, "scrap":70, "fire":0.1, "slowness":10},
+	"LASER_BURST_2": {"offence":2, "shots": 2, "shield_drop":2, "power":1, "scrap":25, "fire":0.2, "slowness":10, "rarity": 2},
+	"LASER_BURST_2_A": {"offence":2, "shots": 2, "shield_drop":2, "power":2, "scrap":50, "fire":0.2, "slowness":11},
+	"LASER_BURST_3": {"offence":3, "shots": 3, "shield_drop":3, "power":2, "scrap":80, "fire":0.3, "slowness":12, "rarity": 3},
+	"LASER_BURST_5": {"offence":5, "shots": 5, "shield_drop":5, "power":4, "scrap":95, "slowness":19},
+	"LASER_HEAVY_1": {"offence":2, "shield_drop":1, "power":1, "scrap":55, "fire":0.3, "breach":0.21, "stun":0.2, "slowness":9},
+	"LASER_HEAVY_2": {"offence":4, "shots": 2, "shield_drop":2, "power":3, "scrap":65, "fire":0.6, "breach":0.42, "stun":0.2, "slowness":13},
+	"LASER_HEAVY_1_SP": {"offence":2, "sp":1, "shield_drop":1, "power":2, "scrap":55, "fire":0.3, "breach":0.21, "slowness":10, "rarity": 2},
+	"LASER_HULL_1": {"offence":2, "shots": 2, "hull_multi":2, "shield_drop":2, "power":2, "scrap":55, "breach":0.4, "slowness":14},
+	"LASER_HULL_2": {"offence":3, "shots": 3, "hull_multi":2, "shield_drop":3, "power":3, "scrap":75, "breach":0.9, "slowness":15},
+	# Chain guns are weird...
+	"LASER_CHAINGUN": {"offence":3, "shots": 2, "shield_drop":2, "power":2, "scrap":65, "fire":0.2, "slowness":16},
+	"LASER_CHAINGUN_2": {"offence":10, "shots": 5, "crewkill":-5, "shield_drop":5, "power":4, "scrap":95, "fire":0.1, "slowness":37},
+	"LASER_CHARGEGUN_PLAYER": {"offence":1, "charges": 2, "shots": 1, "shield_drop":1, "power":1, "scrap":30, "slowness":5.5, "rarity": 2},
+	"LASER_CHARGEGUN_2": {"offence":1, "charges": 4, "shots": 1, "shield_drop":1, "power":3, "scrap":70, "fire":0.1, "slowness":5},
 
-	"SHOTGUN_PLAYER": {"offence":3, "shield_drop":3, "power":1, "scrap":60, "slowness":8},
-	"SHOTGUN": {"offence":2, "shield_drop":3, "power":2, "scrap":65, "slowness":10},
-	"SHOTGUN_2": {"offence":4, "crewkill":-1, "shield_drop":5, "power":3, "scrap":80, "slowness":21},
+	"SHOTGUN_PLAYER": {"offence":3, "shots": 3, "shield_drop":3, "power":1, "scrap":60, "slowness":8, "rarity": 3},
+	"SHOTGUN": {"offence":2, "shots": 3, "shield_drop":3, "power":2, "scrap":65, "slowness":10},
+	"SHOTGUN_2": {"offence":5, "shots": 7, "crewkill":-1, "shield_drop":5, "power":3, "scrap":80, "slowness":21},
 
 	"BEAM_1": {"beam_damage":1, "beam_length": 4, "power":1, "scrap":20, "fire":0.4, "slowness":12},
 	"BEAM_LONG": {"beam_damage":1, "beam_length": 6, "crewkill":-0.6, "power":2, "scrap":55, "slowness":16},
 	"BEAM_2": {"beam_damage":2, "beam_length": 4, "crewkill":-0.4, "power":3, "scrap":65, "slowness":17},
 	"BEAM_3": {"beam_damage":3, "beam_length": 4, "crewkill":-0.4, "power":4, "scrap":95, "slowness":25},
-	"BEAM_FIRE": {"beam_damage":0, "beam_length": 5, "power":2, "scrap":50, "fire":4, "slowness":20},
+	"BEAM_FIRE": {"beam_damage":0, "beam_length": 5, "power":2, "scrap":50, "fire":4, "slowness":20, "rarity": 2},
 	"BEAM_BIO": {"beam_damage":0, "beam_length": 5, "crewkill":4, "power":2, "scrap":50, "slowness":16},
 	"BEAM_HULL": {"beam_damage":1, "beam_length": 4, "hull_multi": 2, "crewkill":-1, "power":2, "scrap":70, "slowness":14},
 
 	"ION_1": {"nonlethal":1, "shield_drop":1, "power":1, "scrap":30, "stun":0.1, "slowness":8},
 	"ION_2": {"nonlethal":2, "shield_drop":1, "power":2, "scrap":45, "stun":0.2, "slowness":13},
-	"ION_4": {"nonlethal":1, "shield_drop":3, "power":3, "scrap":70, "stun":0.5, "slowness":20},
+	# stats for 4 blasts because it's so good at stacking. Once the algorithm is improved for ion weapons, use the stats of one blast
+	"ION_4": {"nonlethal":3, "shots": 4, "shield_drop":2, "power":3, "scrap":70, "stun":0.3, "slowness":16},
 	"ION_STUN": {"nonlethal":1, "shield_drop":1, "power":1, "scrap":35, "stun":1.7, "slowness":10},
-	"ION_CHARGEGUN": {"nonlethal":1, "shield_drop":2, "power":2, "scrap":50, "slowness":18},
-	"ION_CHAINGUN": {"nonlethal":1, "shield_drop":1, "power":3, "scrap":55, "slowness":14},
+	"ION_CHARGEGUN": {"nonlethal":1, "charges": 3, "shots": 1, "shield_drop":0.7, "power":2, "scrap":50, "slowness":6},
+	"ION_CHAINGUN": {"nonlethal":1, "shield_drop":1, "power":3, "scrap":55, "slowness":14, "rarity": 3},
 
 	"BOMB_1": {"nonlethal":2, "crewkill":2, "sp":5, "missiles":1, "power":1, "scrap":45, "fire":0.1, "slowness":13},
 	"BOMB_BREACH_1": {"nonlethal":1, "crewkill":1, "crewkill":0.2, "sp":5, "missiles":1, "power":1, "scrap":50, "breach":1, "slowness":9},
 	"BOMB_BREACH_2": {"nonlethal":3, "crewkill":3, "sp":5, "missiles":1, "power":2, "scrap":60, "breach":1, "slowness":17},
 	"BOMB_FIRE": {"crewkill":0.5, "sp":5, "missiles":1, "power":2, "scrap":50, "fire":1, "slowness":15},
 	"BOMB_ION": {"nonlethal":4, "sp":5, "missiles":1, "power":1, "scrap":55, "stun":0.2, "slowness":22},
-	"BOMB_LOCK": {"support":1, "sp":5, "missiles":1, "power":1, "scrap":45, "slowness":15},
+	"BOMB_LOCK": {"support":1, "sp":5, "missiles":1, "power":1, "scrap":45, "slowness":15, "rarity": 4},
 	"BOMB_STUN": {"nonlethal":1, "sp":5, "missiles":1, "power":1, "scrap":45, "stun":5, "slowness":17},
 
 	"BOMB_HEAL": {"support":4, "sp":5, "missiles":1, "power":1, "scrap":40, "slowness":18},
@@ -421,7 +432,7 @@ weapon_categories = {
 	},
 	"BEAM": {
 		"weights": {
-			"default": 1,
+			"default": 1.5,
 			LAYOUTS.jelly_cruiser: 2,
 			LAYOUTS.stealth: 3,
 			LAYOUTS.energy_cruiser: 3,
@@ -431,7 +442,6 @@ weapon_categories = {
 			"BEAM_LONG",
 			"BEAM_2",
 			"BEAM_3",
-			"BEAM_FIRE",
 			"BEAM_HULL",
 		]
 	},
@@ -444,7 +454,7 @@ weapon_categories = {
 	},
 	"ION": {
 		"weights": {
-			"default": 1,
+			"default": 1.5,
 			LAYOUTS.circle_cruiser: 3,
 			LAYOUTS.energy_cruiser: 3,
 		},
@@ -467,10 +477,20 @@ weapon_categories = {
 			"BOMB_1",
 			"BOMB_BREACH_1",
 			"BOMB_BREACH_2",
-			"BOMB_FIRE",
 			"BOMB_ION",
 			"BOMB_LOCK",
 			"BOMB_STUN",
+		]
+	},
+	"FIRE": {
+		"weights": {
+			"default": 0.5,
+			LAYOUTS.jelly_cruiser: 1,
+			LAYOUTS.rock_cruiser: 2,
+		},
+		"included": [
+			"BEAM_FIRE",
+			"BOMB_FIRE",
 		]
 	},
 	"CRYSTAL": {
